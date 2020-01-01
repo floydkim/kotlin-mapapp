@@ -1,7 +1,5 @@
 package com.floyd.mapapptutorial
 
-import androidx.appcompat.app.AppCompatActivity
-import android.os.Bundle
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
@@ -11,13 +9,15 @@ import android.graphics.drawable.BitmapDrawable
 import android.location.Location
 import android.location.LocationManager
 import android.os.AsyncTask
+import android.os.Bundle
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.MarkerOptions
+import com.google.maps.android.clustering.ClusterManager
 import kotlinx.android.synthetic.main.activity_main.*
 import org.json.JSONArray
 import org.json.JSONObject
@@ -51,7 +51,7 @@ class MainActivity : AppCompatActivity() {
         mapView.onCreate(savedInstanceState)
 
         // 앱이 실행될때 런타임에서 위치 서비스 관련 권한체크
-        if(hasPermissions()) {
+        if (hasPermissions()) {
             // 권한이 있는 경우 맵 초기화
             initMap()
         } else {
@@ -59,7 +59,7 @@ class MainActivity : AppCompatActivity() {
             ActivityCompat.requestPermissions(this, PERMISSIONS, REQUEST_PERMISSTION_CODE)
         }
 
-        myLocationButton.setOnClickListener{ onMyLocationButtonClick() }
+        myLocationButton.setOnClickListener { onMyLocationButtonClick() }
     }
 
     override fun onRequestPermissionsResult(
@@ -76,7 +76,11 @@ class MainActivity : AppCompatActivity() {
     fun hasPermissions(): Boolean {
         // 퍼미션 목록 중 하나라도 권한이 없으면 false
         for (permission in PERMISSIONS) {
-            if (ActivityCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
+            if (ActivityCompat.checkSelfPermission(
+                    this,
+                    permission
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
                 return false
             }
         }
@@ -84,11 +88,25 @@ class MainActivity : AppCompatActivity() {
         return true
     }
 
+    // ClusterManager 변수 선언
+    var clusterManager: ClusterManager<MyItem>? = null
+
+    // ClusterRenderer 변수 선언
+    var clusterRenderer: ClusterRenderer? = null
+
     // 맵 초기화 함수
     @SuppressLint("MissingPermission")
     fun initMap() {
         // 맵뷰에서 구글 맵을 불러오는 함수. 콜백함수에서 구글 맵 객체가 전달된다
         mapView.getMapAsync {
+            // ClusterManager 객체 초기화
+            clusterManager = ClusterManager(this, it)
+            clusterRenderer = ClusterRenderer(this, it, clusterManager)
+
+            // OnCameraIdleListener 와 OnMarkerClickListener 를 clusterManager 로 지정
+            it.setOnCameraIdleListener(clusterManager)
+            it.setOnMarkerClickListener(clusterManager)
+
             // 구글맵 멤버 변수에 구글맵 객체 저장
             googleMap = it
             // 현재위치로 이동 버튼 비활성화
@@ -99,7 +117,12 @@ class MainActivity : AppCompatActivity() {
                     // 현재위치 표시 활성화
                     it.isMyLocationEnabled = true
                     // 현재위치로 카메라 이동
-                    it.moveCamera(CameraUpdateFactory.newLatLngZoom(getMyLocation(), DEFAULT_ZOOM_LEVEL))
+                    it.moveCamera(
+                        CameraUpdateFactory.newLatLngZoom(
+                            getMyLocation(),
+                            DEFAULT_ZOOM_LEVEL
+                        )
+                    )
                 }
                 else -> {
                     // 권한이 없으면 서울시청으로
@@ -124,8 +147,17 @@ class MainActivity : AppCompatActivity() {
     // 현재 위치 버튼 누른 경우
     fun onMyLocationButtonClick() {
         when {
-            hasPermissions() -> googleMap?.moveCamera(CameraUpdateFactory.newLatLngZoom(getMyLocation(), DEFAULT_ZOOM_LEVEL))
-            else -> Toast.makeText(applicationContext, "위치 사용 권한 설정에 동의해주세요", Toast.LENGTH_LONG).show()
+            hasPermissions() -> googleMap?.moveCamera(
+                CameraUpdateFactory.newLatLngZoom(
+                    getMyLocation(),
+                    DEFAULT_ZOOM_LEVEL
+                )
+            )
+            else -> Toast.makeText(
+                applicationContext,
+                "위치 사용 권한 설정에 동의해주세요",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
@@ -173,7 +205,8 @@ class MainActivity : AppCompatActivity() {
 
     // 화장실 정보를 읽어와 JSONObject로 변환하는 함수
     fun readData(startIndex: Int, lastIndex: Int): JSONObject {
-        val url = URL("http://openAPI.seoul.go.kr:8088" + "/${API_KEY}/json/SearchPublicToiletPOIService/${startIndex}/${lastIndex}")
+        val url =
+            URL("http://openAPI.seoul.go.kr:8088" + "/${API_KEY}/json/SearchPublicToiletPOIService/${startIndex}/${lastIndex}")
         val connection = url.openConnection()
 
         val data = connection.getInputStream().readBytes().toString(charset("UTF-8"))
@@ -212,10 +245,12 @@ class MainActivity : AppCompatActivity() {
                 val jsonObject = readData(startIndex, lastIndex)
 
                 // totalCount를 가져온다
-                totalCount = jsonObject.getJSONObject("SearchPublicToiletPOIService").getInt("list_total_count")
+                totalCount = jsonObject.getJSONObject("SearchPublicToiletPOIService")
+                    .getInt("list_total_count")
 
                 // 화장실 정보 데이터 집합을 가져온다
-                val rows = jsonObject.getJSONObject("SearchPublicToiletPOIService").getJSONArray("row")
+                val rows =
+                    jsonObject.getJSONObject("SearchPublicToiletPOIService").getJSONArray("row")
 
                 // 기존 데이터에 병합
                 toilets.merge(rows)
@@ -238,6 +273,9 @@ class MainActivity : AppCompatActivity() {
                     addMarkers(array.getJSONObject(i))
                 }
             }
+
+            // clusterManager 의 클러스터링 실행
+            clusterManager?.cluster()
         }
     }
 
@@ -258,12 +296,22 @@ class MainActivity : AppCompatActivity() {
 
     // 마커를 추가하는 함수
     fun addMarkers(toilet: JSONObject) {
-        googleMap?.addMarker(
-            MarkerOptions()
-                .position(LatLng(toilet.getDouble("Y_WGS84"), toilet.getDouble("X_WGS84")))
-                .title(toilet.getString("FNAME"))
-                .snippet(toilet.getString("ANAME"))
-                .icon(BitmapDescriptorFactory.fromBitmap(bitmap))
+//        googleMap?.addMarker(
+//            MarkerOptions()
+//                .position(LatLng(toilet.getDouble("Y_WGS84"), toilet.getDouble("X_WGS84")))
+//                .title(toilet.getString("FNAME"))
+//                .snippet(toilet.getString("ANAME"))
+//                .icon(BitmapDescriptorFactory.fromBitmap(bitmap))
+//        )
+
+        // clusterManager 를 이용해 마커 추가
+        clusterManager?.addItem(
+            MyItem(
+                LatLng(toilet.getDouble("Y_WGS84"), toilet.getDouble("X_WGS84")),
+                toilet.getString("FNAME"),
+                toilet.getString("ANAME"),
+                BitmapDescriptorFactory.fromBitmap(bitmap)
+            )
         )
     }
 }
