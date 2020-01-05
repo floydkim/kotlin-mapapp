@@ -10,6 +10,7 @@ import android.location.Location
 import android.location.LocationManager
 import android.os.AsyncTask
 import android.os.Bundle
+import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -19,6 +20,7 @@ import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.clustering.ClusterManager
 import kotlinx.android.synthetic.main.activity_main.*
+import kotlinx.android.synthetic.main.search_bar.view.*
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URL
@@ -190,6 +192,9 @@ class MainActivity : AppCompatActivity() {
     // 서울시 화장실 정보 집합을 저장할 Array 변수. 검색을 위해 저장
     var toilets = JSONArray()
 
+    // JsonObject 를 키로 MyItem 객체를 저장할 맵
+    val itemMap = mutableMapOf<JSONObject, MyItem>()
+
     // 화장실 이미지로 사용할 Bitmap
     val bitmap by lazy {
         val drawable = resources.getDrawable(R.drawable.restroom_sign) as BitmapDrawable
@@ -221,6 +226,8 @@ class MainActivity : AppCompatActivity() {
             googleMap?.clear()
             // 화장실 정보 초기화
             toilets = JSONArray()
+            // itemMap 변수 초기화
+            itemMap.clear()
         }
 
         override fun doInBackground(vararg params: Void?): String {
@@ -276,6 +283,30 @@ class MainActivity : AppCompatActivity() {
 
             // clusterManager 의 클러스터링 실행
             clusterManager?.cluster()
+        }
+
+        // 백그라운드 작업이 완료된 후 실행
+        override fun onPostExecute(result: String?) {
+            // 자동완성 텍스트 뷰 (AutoCompleteTextView) 에서 사용할 텍스트 리스트
+            val textList = mutableListOf<String>()
+
+            // 모든 화장실의 이름을 텍스트 리스트에 추가
+            for (i in 0 until toilets.length()) {
+                val toilet = toilets.getJSONObject(i)
+                textList.add(toilet.getString("FNAME"))
+            }
+
+            // 자동완성 텍스트뷰에서 사용하는 어댑터 추가
+            val adapter = ArrayAdapter<String>(
+                this@MainActivity,
+                android.R.layout.simple_dropdown_item_1line,
+                textList
+            )
+
+            // 자동완성이 시작되는 글자수 지정
+            searchBar.autoCompleteTextView.threshold = 1
+            // autoCompleteTextView 의 어댑터를 상단에서 만든 어댑터로 지정
+            searchBar.autoCompleteTextView.setAdapter(adapter)
         }
     }
 
