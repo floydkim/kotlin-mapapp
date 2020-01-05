@@ -10,6 +10,7 @@ import android.location.Location
 import android.location.LocationManager
 import android.os.AsyncTask
 import android.os.Bundle
+import android.text.TextUtils
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -310,12 +311,55 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // JSONArray 에서 원소의 속성으로 원소를 검색
+    fun JSONArray.findByChildProperty(propertyName: String, value: String): JSONObject? {
+        // JSONArray 를 순회하면서 각 JSONObject 의 프로퍼티 값이 같은지 확인
+        for (i in 0 until length()) {
+            val obj = getJSONObject(i)
+            if (value == obj.getString(propertyName)) return obj
+        }
+        return null
+    }
+
     // 앱 활성화 될 때 서울시 데이터를 읽어옴
     override fun onStart() {
         super.onStart()
         task?.cancel(true)
         task = ToiletReadTask()
         task?.execute()
+
+        // searchBar 의 검색 아이콘에 이벤트 리스너 설정
+        searchBar.imageView.setOnClickListener {
+            // autoCompleteTextView 의 텍스트를 읽어 키워드로 가져옴
+            val keyword = searchBar.autoCompleteTextView.text.toString()
+            // 키워드 값이 없으면 그대로 리턴
+            if (TextUtils.isEmpty(keyword)) return@setOnClickListener
+
+            // 검색 키워드에 해당하는 JSONObject 를 찾는다
+            toilets.findByChildProperty("FNAME", keyword)?.let {
+                // itemMap 에서 JSONObject 를 키로 가진 MyItem 객체를 가져온다
+                val myItem = itemMap[it]
+
+                // ClusterRenderer 에서 myItem 을 기반으로 마커를 검색한다
+                // myItem 은 위도, 경도, 제목, 설명 속성이 같으면 같은 객체로 취급됨
+                val marker = clusterRenderer?.getMarker(myItem)
+
+                // 마커에 인포 윈도우를 보여준다
+                marker?.showInfoWindow()
+
+                googleMap?.moveCamera(
+                    CameraUpdateFactory.newLatLngZoom(
+                        LatLng(it.getDouble("Y_WGS84"), it.getDouble("X_WGS84")), DEFAULT_ZOOM_LEVEL
+                    )
+                )
+                clusterManager?.cluster()
+            }
+
+            // 검색 텍스트뷰의 텍스트를 지운다
+            searchBar.autoCompleteTextView.setText("")
+
+            searchBar.autoCompleteTextView.clearFocus()
+        }
     }
 
     // 앱 비활성화 될 때 백그라운드 작업 취소
@@ -335,14 +379,17 @@ class MainActivity : AppCompatActivity() {
 //                .icon(BitmapDescriptorFactory.fromBitmap(bitmap))
 //        )
 
-        // clusterManager 를 이용해 마커 추가
-        clusterManager?.addItem(
-            MyItem(
-                LatLng(toilet.getDouble("Y_WGS84"), toilet.getDouble("X_WGS84")),
-                toilet.getString("FNAME"),
-                toilet.getString("ANAME"),
-                BitmapDescriptorFactory.fromBitmap(bitmap)
-            )
+        val item = MyItem(
+            LatLng(toilet.getDouble("Y_WGS84"), toilet.getDouble("X_WGS84")),
+            toilet.getString("FNAME"),
+            toilet.getString("ANAME"),
+            BitmapDescriptorFactory.fromBitmap(bitmap)
         )
+
+        // clusterManager 를 이용해 마커 추가
+        clusterManager?.addItem(item)
+
+        // 아이템맵에 toilet 객체를 키로 MyItem 객체 저장
+        itemMap.put(toilet, item)
     }
 }
